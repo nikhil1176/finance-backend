@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
+const swaggerDocument = require('./swagger.json');
 const { generalLimiter } = require('./middleware/rateLimiter');
 const { errorHandler } = require('./middleware/errorHandler');
 const ApiError = require('./utils/ApiError');
@@ -16,8 +17,6 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10kb' }));
 app.use(generalLimiter);
-
-// Trust proxy for Render.com (needed for correct protocol detection)
 app.set('trust proxy', 1);
 
 // Request logging in development
@@ -32,41 +31,21 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// ─── Swagger API Documentation ───────────────────────
-const swaggerDocument = require('./swagger.json');
-const swaggerOptions = {
-  customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'Finance API Documentation',
-  swaggerOptions: {
-    persistAuthorization: true,
-    docExpansion: 'list',
-    filter: true,
-    tryItOutEnabled: true,
-  },
-};
-
-app.use('/api-docs', (req, res, next) => {
-  // Detect correct protocol (Render uses x-forwarded-proto)
-  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-  const host = req.get('host');
-  
-  // Deep clone to avoid mutating the original
-  const doc = JSON.parse(JSON.stringify(swaggerDocument));
-  doc.servers = [
-    { url: `${protocol}://${host}`, description: 'Current Server' },
-  ];
-
-  // Setup swagger with the updated doc
-  swaggerUi.setup(doc, swaggerOptions)(req, res, next);
-}, swaggerUi.serve, (req, res, next) => {
-  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-  const host = req.get('host');
-  const doc = JSON.parse(JSON.stringify(swaggerDocument));
-  doc.servers = [
-    { url: `${protocol}://${host}`, description: 'Current Server' },
-  ];
-  swaggerUi.setup(doc, swaggerOptions)(req, res, next);
-});
+// ─── Swagger API Documentation (simple setup) ───────
+app.use(
+  '/api-docs',
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerDocument, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'Finance API Documentation',
+    swaggerOptions: {
+      persistAuthorization: true,
+      docExpansion: 'list',
+      filter: true,
+      tryItOutEnabled: true,
+    },
+  })
+);
 
 // ─── Health Check ────────────────────────────────────
 app.get('/api/health', (req, res) => {
