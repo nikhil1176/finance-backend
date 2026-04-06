@@ -1,0 +1,581 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Finance Data Processing & Access Control API",
+    "description": "Backend API for a finance dashboard system with role-based access control, financial record management, and analytics.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "API Developer"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development"
+    }
+  ],
+  "tags": [
+    { "name": "Health", "description": "Health check endpoint" },
+    { "name": "Auth", "description": "Authentication & profile" },
+    { "name": "Users", "description": "User management (Admin only)" },
+    { "name": "Records", "description": "Financial records management" },
+    { "name": "Dashboard", "description": "Dashboard analytics & summaries" }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "API is running",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Finance Backend API is running",
+                  "uptime": 123.45,
+                  "timestamp": "2025-04-06T10:00:00.000Z"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Register a new user",
+        "description": "First registered user automatically becomes admin. Subsequent users become viewers.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RegisterInput" },
+              "example": {
+                "email": "newuser@example.com",
+                "password": "password123",
+                "firstName": "John",
+                "lastName": "Doe"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User registered successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Registration successful",
+                  "data": {
+                    "user": {
+                      "id": "uuid",
+                      "email": "newuser@example.com",
+                      "first_name": "John",
+                      "last_name": "Doe",
+                      "role": "viewer",
+                      "status": "active"
+                    },
+                    "token": "jwt-token-here"
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Validation error" },
+          "409": { "description": "Email already exists" }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Login with email and password",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginInput" },
+              "example": {
+                "email": "admin@finance.com",
+                "password": "password123"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Login successful",
+                  "data": {
+                    "user": {
+                      "id": "uuid",
+                      "email": "admin@finance.com",
+                      "role": "admin",
+                      "status": "active"
+                    },
+                    "token": "jwt-token-here"
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Invalid credentials" },
+          "403": { "description": "Account inactive" }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Get current user profile",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Profile retrieved" },
+          "401": { "description": "Unauthorized" }
+        }
+      },
+      "put": {
+        "tags": ["Auth"],
+        "summary": "Update own profile (name, password)",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "firstName": "Updated",
+                "lastName": "Name",
+                "password": "newpassword123"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Profile updated" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "List all users (Admin only)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "role", "in": "query", "schema": { "type": "string", "enum": ["admin", "analyst", "viewer"] } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["active", "inactive"] } },
+          { "name": "search", "in": "query", "schema": { "type": "string" }, "description": "Search by name or email" }
+        ],
+        "responses": {
+          "200": { "description": "Users list with pagination" },
+          "403": { "description": "Forbidden - Admin only" }
+        }
+      },
+      "post": {
+        "tags": ["Users"],
+        "summary": "Create a new user (Admin only)",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateUserInput" },
+              "example": {
+                "email": "analyst@example.com",
+                "password": "password123",
+                "firstName": "Jane",
+                "lastName": "Smith",
+                "role": "analyst",
+                "status": "active"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User created" },
+          "400": { "description": "Validation error" },
+          "403": { "description": "Forbidden" },
+          "409": { "description": "Email exists" }
+        }
+      }
+    },
+    "/api/users/{id}": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get user by ID (Admin only)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "User details" },
+          "404": { "description": "User not found" }
+        }
+      },
+      "put": {
+        "tags": ["Users"],
+        "summary": "Update user (Admin only)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "firstName": "Updated",
+                "role": "analyst",
+                "status": "active"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "User updated" },
+          "403": { "description": "Forbidden" },
+          "404": { "description": "User not found" }
+        }
+      },
+      "delete": {
+        "tags": ["Users"],
+        "summary": "Delete user (Admin only)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "User deleted" },
+          "400": { "description": "Cannot delete self or last admin" },
+          "404": { "description": "User not found" }
+        }
+      }
+    },
+    "/api/users/{id}/audit-logs": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get audit logs for a user (Admin only)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Audit logs retrieved" }
+        }
+      }
+    },
+    "/api/records": {
+      "get": {
+        "tags": ["Records"],
+        "summary": "List financial records (All authenticated users)",
+        "description": "Supports filtering, sorting, pagination, and search",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "type", "in": "query", "schema": { "type": "string", "enum": ["income", "expense"] } },
+          { "name": "category", "in": "query", "schema": { "type": "string", "enum": ["salary","freelance","investment","rent","utilities","groceries","transport","entertainment","healthcare","education","shopping","travel","food","insurance","taxes","other"] } },
+          { "name": "dateFrom", "in": "query", "schema": { "type": "string", "format": "date" }, "description": "YYYY-MM-DD" },
+          { "name": "dateTo", "in": "query", "schema": { "type": "string", "format": "date" }, "description": "YYYY-MM-DD" },
+          { "name": "minAmount", "in": "query", "schema": { "type": "number" } },
+          { "name": "maxAmount", "in": "query", "schema": { "type": "number" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" }, "description": "Search in description and category" },
+          { "name": "sortBy", "in": "query", "schema": { "type": "string", "enum": ["date","amount","type","category","created_at"], "default": "date" } },
+          { "name": "sortOrder", "in": "query", "schema": { "type": "string", "enum": ["ASC","DESC"], "default": "DESC" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Records with pagination",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "id": "uuid",
+                      "amount": 5000,
+                      "type": "income",
+                      "category": "salary",
+                      "description": "Monthly salary",
+                      "date": "2025-03-15",
+                      "created_by_name": "Admin User"
+                    }
+                  ],
+                  "pagination": { "page": 1, "limit": 20, "total": 44, "totalPages": 3 }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Records"],
+        "summary": "Create a financial record (Admin only)",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateRecordInput" },
+              "example": {
+                "amount": 1500,
+                "type": "expense",
+                "category": "rent",
+                "description": "Monthly rent payment",
+                "date": "2025-04-01"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Record created" },
+          "400": { "description": "Validation error" },
+          "403": { "description": "Forbidden - Admin only" }
+        }
+      }
+    },
+    "/api/records/{id}": {
+      "get": {
+        "tags": ["Records"],
+        "summary": "Get a single record",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Record details" },
+          "404": { "description": "Record not found" }
+        }
+      },
+      "put": {
+        "tags": ["Records"],
+        "summary": "Update a record (Admin only)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "amount": 1600,
+                "description": "Updated rent"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Record updated" },
+          "400": { "description": "Validation error" },
+          "403": { "description": "Forbidden" },
+          "404": { "description": "Not found" }
+        }
+      },
+      "delete": {
+        "tags": ["Records"],
+        "summary": "Delete a record (Admin only)",
+        "description": "Soft deletes by default. Add ?hard=true for permanent deletion.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "hard", "in": "query", "schema": { "type": "boolean", "default": false }, "description": "Set true for permanent delete" }
+        ],
+        "responses": {
+          "200": { "description": "Record deleted" },
+          "403": { "description": "Forbidden" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/api/records/{id}/restore": {
+      "post": {
+        "tags": ["Records"],
+        "summary": "Restore a soft-deleted record (Admin only)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Record restored" },
+          "400": { "description": "Record is not deleted" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/api/dashboard/overview": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Dashboard overview (All authenticated users)",
+        "description": "Returns total income, expenses, net balance, top categories, and recent activity",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Dashboard overview data",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": {
+                    "summary": {
+                      "totalIncome": 19700,
+                      "totalExpenses": 12210,
+                      "netBalance": 7490,
+                      "totalRecords": 44
+                    },
+                    "topExpenseCategories": [
+                      { "category": "rent", "total_amount": 6000, "count": 4 }
+                    ],
+                    "topIncomeCategories": [
+                      { "category": "salary", "total_amount": 20200, "count": 4 }
+                    ],
+                    "recentActivity": []
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dashboard/categories": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Category-wise breakdown",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "type", "in": "query", "schema": { "type": "string", "enum": ["income", "expense"] }, "description": "Filter by type" }
+        ],
+        "responses": {
+          "200": { "description": "Category breakdown with percentages" }
+        }
+      }
+    },
+    "/api/dashboard/trends/monthly": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Monthly income/expense trends",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "months", "in": "query", "schema": { "type": "integer", "default": 12 } }
+        ],
+        "responses": {
+          "200": { "description": "Monthly trend data" }
+        }
+      }
+    },
+    "/api/dashboard/trends/weekly": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Weekly income/expense trends",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "weeks", "in": "query", "schema": { "type": "integer", "default": 12 } }
+        ],
+        "responses": {
+          "200": { "description": "Weekly trend data" }
+        }
+      }
+    },
+    "/api/dashboard/trends/daily": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Daily income/expense trends",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "days", "in": "query", "schema": { "type": "integer", "default": 30 } }
+        ],
+        "responses": {
+          "200": { "description": "Daily trend data" }
+        }
+      }
+    },
+    "/api/dashboard/recent": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Recent financial activity",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }
+        ],
+        "responses": {
+          "200": { "description": "Recent records" }
+        }
+      }
+    },
+    "/api/dashboard/analytics": {
+      "get": {
+        "tags": ["Dashboard"],
+        "summary": "Advanced analytics (Analyst & Admin only)",
+        "description": "Includes user stats, month-over-month changes, full category breakdown",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Full analytics data" },
+          "403": { "description": "Forbidden - Viewer cannot access" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Login to get token, then use: Bearer <token>"
+      }
+    },
+    "schemas": {
+      "RegisterInput": {
+        "type": "object",
+        "required": ["email", "password", "firstName", "lastName"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string", "minLength": 8 },
+          "firstName": { "type": "string" },
+          "lastName": { "type": "string" }
+        }
+      },
+      "LoginInput": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string" }
+        }
+      },
+      "CreateUserInput": {
+        "type": "object",
+        "required": ["email", "password", "firstName", "lastName"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string", "minLength": 8 },
+          "firstName": { "type": "string" },
+          "lastName": { "type": "string" },
+          "role": { "type": "string", "enum": ["admin", "analyst", "viewer"], "default": "viewer" },
+          "status": { "type": "string", "enum": ["active", "inactive"], "default": "active" }
+        }
+      },
+      "CreateRecordInput": {
+        "type": "object",
+        "required": ["amount", "type", "category", "date"],
+        "properties": {
+          "amount": { "type": "number", "minimum": 0.01, "description": "Positive number" },
+          "type": { "type": "string", "enum": ["income", "expense"] },
+          "category": { "type": "string", "enum": ["salary","freelance","investment","rent","utilities","groceries","transport","entertainment","healthcare","education","shopping","travel","food","insurance","taxes","other"] },
+          "date": { "type": "string", "format": "date", "description": "YYYY-MM-DD" },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  }
+}

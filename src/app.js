@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const swaggerUi = require('swagger-ui-express');
+const swaggerDocument = require('./swagger.json');
 const { generalLimiter } = require('./middleware/rateLimiter');
 const { errorHandler } = require('./middleware/errorHandler');
 const ApiError = require('./utils/ApiError');
@@ -28,147 +30,83 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
+// ─── Swagger API Documentation ───────────────────────
+const swaggerOptions = {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Finance API Documentation',
+  swaggerOptions: {
+    persistAuthorization: true,
+    docExpansion: 'list',
+    filter: true,
+    tryItOutEnabled: true,
+  },
+};
+
+app.use('/api-docs', (req, res, next) => {
+  swaggerDocument.servers = [
+    { url: `${req.protocol}://${req.get('host')}`, description: 'Current Server' },
+  ];
+  next();
+}, swaggerUi.serve, swaggerUi.setup(swaggerDocument, swaggerOptions));
+
 // ─── Health Check ────────────────────────────────────
 app.get('/api/health', (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
   res.json({
     success: true,
     message: 'Finance Backend API is running',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
+    docs: `${baseUrl}/api-docs`,
   });
 });
 
-// ─── API Documentation Endpoint ──────────────────────
+// ─── API Info Endpoint ───────────────────────────────
 app.get('/api', (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
   res.json({
     success: true,
     message: 'Finance Data Processing & Access Control API',
     version: '1.0.0',
-    documentation: {
+    documentation: `${baseUrl}/api-docs`,
+    healthCheck: `${baseUrl}/api/health`,
+    endpoints: {
       auth: {
-        'POST /api/auth/register': {
-          description: 'Register a new user (first user becomes admin)',
-          body: { email: 'string', password: 'string (min 8 chars)', firstName: 'string', lastName: 'string' },
-          access: 'Public',
-        },
-        'POST /api/auth/login': {
-          description: 'Login with email and password',
-          body: { email: 'string', password: 'string' },
-          access: 'Public',
-        },
-        'GET /api/auth/me': {
-          description: 'Get current user profile',
-          access: 'Authenticated',
-        },
-        'PUT /api/auth/me': {
-          description: 'Update own profile',
-          body: { firstName: 'string (optional)', lastName: 'string (optional)', password: 'string (optional)' },
-          access: 'Authenticated',
-        },
+        register: 'POST /api/auth/register',
+        login: 'POST /api/auth/login',
+        profile: 'GET /api/auth/me',
+        updateProfile: 'PUT /api/auth/me',
       },
       users: {
-        'GET /api/users': {
-          description: 'List all users with pagination and filters',
-          query: { page: 'number', limit: 'number', role: 'admin|analyst|viewer', status: 'active|inactive', search: 'string' },
-          access: 'Admin only',
-        },
-        'GET /api/users/:id': {
-          description: 'Get user by ID',
-          access: 'Admin only',
-        },
-        'POST /api/users': {
-          description: 'Create a new user',
-          body: { email: 'string', password: 'string', firstName: 'string', lastName: 'string', role: 'admin|analyst|viewer (optional)', status: 'active|inactive (optional)' },
-          access: 'Admin only',
-        },
-        'PUT /api/users/:id': {
-          description: 'Update a user',
-          body: { firstName: 'string (optional)', lastName: 'string (optional)', role: 'string (optional)', status: 'string (optional)', password: 'string (optional)' },
-          access: 'Admin only',
-        },
-        'DELETE /api/users/:id': {
-          description: 'Delete a user',
-          access: 'Admin only',
-        },
-        'GET /api/users/:id/audit-logs': {
-          description: 'Get audit logs for a specific user',
-          access: 'Admin only',
-        },
+        list: 'GET /api/users',
+        get: 'GET /api/users/:id',
+        create: 'POST /api/users',
+        update: 'PUT /api/users/:id',
+        delete: 'DELETE /api/users/:id',
+        auditLogs: 'GET /api/users/:id/audit-logs',
       },
       records: {
-        'GET /api/records': {
-          description: 'List financial records with filters, pagination, sorting',
-          query: {
-            page: 'number', limit: 'number', type: 'income|expense',
-            category: 'string', dateFrom: 'YYYY-MM-DD', dateTo: 'YYYY-MM-DD',
-            minAmount: 'number', maxAmount: 'number', search: 'string',
-            sortBy: 'date|amount|type|category|created_at', sortOrder: 'ASC|DESC',
-          },
-          access: 'Viewer, Analyst, Admin',
-        },
-        'GET /api/records/:id': {
-          description: 'Get a single financial record',
-          access: 'Viewer, Analyst, Admin',
-        },
-        'POST /api/records': {
-          description: 'Create a financial record',
-          body: {
-            amount: 'number (positive)', type: 'income|expense',
-            category: 'string (from allowed list)', date: 'YYYY-MM-DD',
-            description: 'string (optional)',
-          },
-          access: 'Admin only',
-        },
-        'PUT /api/records/:id': {
-          description: 'Update a financial record',
-          body: { amount: 'number (optional)', type: 'string (optional)', category: 'string (optional)', date: 'YYYY-MM-DD (optional)', description: 'string (optional)' },
-          access: 'Admin only',
-        },
-        'DELETE /api/records/:id': {
-          description: 'Soft delete a financial record (use ?hard=true for permanent)',
-          query: { hard: 'true|false' },
-          access: 'Admin only',
-        },
-        'POST /api/records/:id/restore': {
-          description: 'Restore a soft-deleted financial record',
-          access: 'Admin only',
-        },
+        list: 'GET /api/records',
+        get: 'GET /api/records/:id',
+        create: 'POST /api/records',
+        update: 'PUT /api/records/:id',
+        delete: 'DELETE /api/records/:id',
+        restore: 'POST /api/records/:id/restore',
       },
       dashboard: {
-        'GET /api/dashboard/overview': {
-          description: 'Get dashboard overview (totals, top categories, recent activity)',
-          access: 'Viewer, Analyst, Admin',
-        },
-        'GET /api/dashboard/categories': {
-          description: 'Get category-wise breakdown',
-          query: { type: 'income|expense (optional)' },
-          access: 'Viewer, Analyst, Admin',
-        },
-        'GET /api/dashboard/trends/monthly': {
-          description: 'Get monthly income/expense trends',
-          query: { months: 'number (default 12)' },
-          access: 'Viewer, Analyst, Admin',
-        },
-        'GET /api/dashboard/trends/weekly': {
-          description: 'Get weekly income/expense trends',
-          query: { weeks: 'number (default 12)' },
-          access: 'Viewer, Analyst, Admin',
-        },
-        'GET /api/dashboard/trends/daily': {
-          description: 'Get daily income/expense trends',
-          query: { days: 'number (default 30)' },
-          access: 'Viewer, Analyst, Admin',
-        },
-        'GET /api/dashboard/recent': {
-          description: 'Get recent financial activity',
-          query: { limit: 'number (default 10)' },
-          access: 'Viewer, Analyst, Admin',
-        },
-        'GET /api/dashboard/analytics': {
-          description: 'Get advanced analytics (includes user stats, MoM changes)',
-          access: 'Analyst, Admin only',
-        },
+        overview: 'GET /api/dashboard/overview',
+        categories: 'GET /api/dashboard/categories',
+        monthlyTrends: 'GET /api/dashboard/trends/monthly',
+        weeklyTrends: 'GET /api/dashboard/trends/weekly',
+        dailyTrends: 'GET /api/dashboard/trends/daily',
+        recent: 'GET /api/dashboard/recent',
+        analytics: 'GET /api/dashboard/analytics',
       },
+    },
+    testCredentials: {
+      admin: { email: 'admin@finance.com', password: 'password123' },
+      analyst: { email: 'analyst@finance.com', password: 'password123' },
+      viewer: { email: 'viewer@finance.com', password: 'password123' },
     },
     roles: {
       viewer: 'Can view records and basic dashboard data',
