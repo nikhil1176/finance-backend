@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const swaggerUi = require('swagger-ui-express');
-const swaggerDocument = require('./swagger.json');
 const { generalLimiter } = require('./middleware/rateLimiter');
 const { errorHandler } = require('./middleware/errorHandler');
 const ApiError = require('./utils/ApiError');
@@ -18,6 +17,9 @@ app.use(cors());
 app.use(express.json({ limit: '10kb' }));
 app.use(generalLimiter);
 
+// Trust proxy for Render.com (needed for correct protocol detection)
+app.set('trust proxy', 1);
+
 // Request logging in development
 if (process.env.NODE_ENV === 'development') {
   app.use((req, res, next) => {
@@ -31,6 +33,7 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // ─── Swagger API Documentation ───────────────────────
+const swaggerDocument = require('./swagger.json');
 const swaggerOptions = {
   customCss: '.swagger-ui .topbar { display: none }',
   customSiteTitle: 'Finance API Documentation',
@@ -43,15 +46,32 @@ const swaggerOptions = {
 };
 
 app.use('/api-docs', (req, res, next) => {
-  swaggerDocument.servers = [
-    { url: `${req.protocol}://${req.get('host')}`, description: 'Current Server' },
+  // Detect correct protocol (Render uses x-forwarded-proto)
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const host = req.get('host');
+  
+  // Deep clone to avoid mutating the original
+  const doc = JSON.parse(JSON.stringify(swaggerDocument));
+  doc.servers = [
+    { url: `${protocol}://${host}`, description: 'Current Server' },
   ];
-  next();
-}, swaggerUi.serve, swaggerUi.setup(swaggerDocument, swaggerOptions));
+
+  // Setup swagger with the updated doc
+  swaggerUi.setup(doc, swaggerOptions)(req, res, next);
+}, swaggerUi.serve, (req, res, next) => {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const host = req.get('host');
+  const doc = JSON.parse(JSON.stringify(swaggerDocument));
+  doc.servers = [
+    { url: `${protocol}://${host}`, description: 'Current Server' },
+  ];
+  swaggerUi.setup(doc, swaggerOptions)(req, res, next);
+});
 
 // ─── Health Check ────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const baseUrl = `${protocol}://${req.get('host')}`;
   res.json({
     success: true,
     message: 'Finance Backend API is running',
@@ -63,7 +83,8 @@ app.get('/api/health', (req, res) => {
 
 // ─── API Info Endpoint ───────────────────────────────
 app.get('/api', (req, res) => {
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const baseUrl = `${protocol}://${req.get('host')}`;
   res.json({
     success: true,
     message: 'Finance Data Processing & Access Control API',
