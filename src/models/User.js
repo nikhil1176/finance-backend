@@ -1,7 +1,17 @@
-const { getDatabase } = require('../config/database');
+const { getDatabase, saveDatabase } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 
 class User {
+  static _mapRows(result) {
+    if (!result || result.length === 0) return [];
+    const columns = result[0].columns;
+    return result[0].values.map(row => {
+      const obj = {};
+      columns.forEach((col, i) => { obj[col] = row[i]; });
+      return obj;
+    });
+  }
+
   static findAll({ role, status, page = 1, limit = 20, search } = {}) {
     const db = getDatabase();
     let query = 'SELECT id, email, first_name, last_name, role, status, created_at, updated_at FROM users WHERE 1=1';
@@ -19,52 +29,53 @@ class User {
       'SELECT id, email, first_name, last_name, role, status, created_at, updated_at',
       'SELECT COUNT(*) as total'
     );
-    const { total } = db.prepare(countQuery).get(...params);
+    const countResult = db.exec(countQuery, params);
+    const total = countResult.length > 0 ? countResult[0].values[0][0] : 0;
 
     const offset = (page - 1) * limit;
     query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), offset);
 
-    const users = db.prepare(query).all(...params);
+    const result = db.exec(query, params);
+    const users = User._mapRows(result);
 
     return {
       users,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / limit) },
     };
   }
 
   static findById(id) {
     const db = getDatabase();
-    return db.prepare(
-      'SELECT id, email, first_name, last_name, role, status, created_at, updated_at FROM users WHERE id = ?'
-    ).get(id);
+    const result = db.exec(
+      'SELECT id, email, first_name, last_name, role, status, created_at, updated_at FROM users WHERE id = ?', [id]
+    );
+    const rows = User._mapRows(result);
+    return rows[0] || null;
   }
 
   static findByEmail(email) {
     const db = getDatabase();
-    return db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    const result = db.exec('SELECT * FROM users WHERE email = ?', [email]);
+    return User._mapRows(result)[0] || null;
   }
 
   static findByEmailWithPassword(email) {
     const db = getDatabase();
-    return db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    const result = db.exec('SELECT * FROM users WHERE email = ?', [email]);
+    return User._mapRows(result)[0] || null;
   }
 
   static create({ email, passwordHash, firstName, lastName, role = 'viewer', status = 'active' }) {
     const db = getDatabase();
     const id = uuidv4();
     const now = new Date().toISOString();
-
-    db.prepare(
+    db.run(
       `INSERT INTO users (id, email, password_hash, first_name, last_name, role, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, email, passwordHash, firstName, lastName, role, status, now, now);
-
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, email, passwordHash, firstName, lastName, role, status, now, now]
+    );
+    saveDatabase();
     return User.findById(id);
   }
 
@@ -73,14 +84,7 @@ class User {
     const allowedFields = ['first_name', 'last_name', 'role', 'status', 'password_hash'];
     const updates = [];
     const params = [];
-
-    const fieldMap = {
-      firstName: 'first_name',
-      lastName: 'last_name',
-      role: 'role',
-      status: 'status',
-      passwordHash: 'password_hash',
-    };
+    const fieldMap = { firstName: 'first_name', lastName: 'last_name', role: 'role', status: 'status', passwordHash: 'password_hash' };
 
     for (const [key, value] of Object.entries(fields)) {
       const dbField = fieldMap[key] || key;
@@ -89,21 +93,22 @@ class User {
         params.push(value);
       }
     }
-
     if (updates.length === 0) return User.findById(id);
 
     updates.push('updated_at = ?');
     params.push(new Date().toISOString());
     params.push(id);
-
-    db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+    saveDatabase();
     return User.findById(id);
   }
 
   static delete(id) {
     const db = getDatabase();
-    const result = db.prepare('DELETE FROM users WHERE id = ?').run(id);
-    return result.changes > 0;
+    db.run('DELETE FROM users WHERE id = ?', [id]);
+    const changes = db.getRowsModified();
+    saveDatabase();
+    return changes > 0;
   }
 
   static count(filters = {}) {
@@ -112,7 +117,8 @@ class User {
     const params = [];
     if (filters.role) { query += ' AND role = ?'; params.push(filters.role); }
     if (filters.status) { query += ' AND status = ?'; params.push(filters.status); }
-    return db.prepare(query).get(...params).count;
+    const result = db.exec(query, params);
+    return result.length > 0 ? result[0].values[0][0] : 0;
   }
 }
 
